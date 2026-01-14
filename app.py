@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import altair as alt
 import joblib
 
 # --------------------------------------------------
@@ -17,7 +18,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Sidebar controls
+# Sidebar controls (with metadata)
 # --------------------------------------------------
 st.sidebar.title("Scenario Controls")
 
@@ -25,7 +26,8 @@ distribution = st.sidebar.slider(
     "Weighted Distribution (%)",
     min_value=40,
     max_value=60,
-    value=50
+    value=50,
+    help="Percentage of category sales coming from outlets where the brand is present"
 )
 
 price_ratio = st.sidebar.slider(
@@ -33,14 +35,16 @@ price_ratio = st.sidebar.slider(
     min_value=0.8,
     max_value=1.2,
     step=0.01,
-    value=1.0
+    value=1.0,
+    help="Brand price divided by average competitor price (above 1 = premium pricing)"
 )
 
 adstock = st.sidebar.slider(
     "Advertising Adstock",
     min_value=0,
     max_value=4000,
-    value=1000
+    value=1000,
+    help="Cumulative and lagged impact of advertising spend"
 )
 
 # --------------------------------------------------
@@ -59,6 +63,28 @@ base_sales = np.expm1(model.predict(X_base)[0])
 # --------------------------------------------------
 st.title("Marketing Mix Decision Simulator")
 st.caption("Interactive what-if analysis based on a trained regression model")
+
+# --------------------------------------------------
+# STEP 2A: Model Overview
+# --------------------------------------------------
+st.subheader("Model Overview")
+
+st.markdown("""
+This simulator is based on a **log-linear Marketing Mix Model (MMX)** 
+trained on historical monthly data.
+
+### Key Drivers Used
+- **Weighted Distribution (%)**  
+  Measures how widely the brand is available across high-value outlets.
+
+- **Price Ratio vs Competition**  
+  Ratio of brand price to competitor price. Values above 1 indicate premium pricing.
+
+- **Advertising Adstock**  
+  Captures the cumulative and lagged effect of advertising with diminishing returns.
+""")
+
+st.divider()
 
 # --------------------------------------------------
 # KPI section
@@ -84,7 +110,7 @@ c3.metric(
 st.divider()
 
 # --------------------------------------------------
-# Scenario comparison chart
+# Scenario comparison chart (clean & aesthetic)
 # --------------------------------------------------
 st.subheader("Scenario Comparison")
 
@@ -93,7 +119,15 @@ compare_df = pd.DataFrame({
     "Sales": [base_sales, sales_pred]
 })
 
-st.bar_chart(compare_df.set_index("Scenario"))
+scenario_chart = alt.Chart(compare_df).mark_bar(size=45).encode(
+    x=alt.X("Scenario:N", title=None),
+    y=alt.Y("Sales:Q", title="Sales Volume"),
+    tooltip=["Scenario", "Sales"]
+).properties(
+    height=300
+)
+
+st.altair_chart(scenario_chart, use_container_width=True)
 
 st.divider()
 
@@ -103,21 +137,36 @@ st.divider()
 st.subheader("Explainability (Elasticities)")
 
 st.markdown("""
-**Model Insights:**
+**Model Insights**
 - **Distribution elasticity:** +2.1%  
 - **Price elasticity:** −0.57  
 - **Advertising elasticity:** +0.01 (diminishing returns)
 
-**Interpretation:**  
-Distribution is the strongest long-term growth lever.  
-Pricing above competition reduces demand.  
-Advertising supports momentum but with diminishing returns.
+**Interpretation**
+- Distribution is the strongest long-term growth lever  
+- Higher pricing vs competition reduces demand  
+- Advertising supports sales but with diminishing marginal impact
+""")
+
+# --------------------------------------------------
+# STEP 2B: How predictions are calculated
+# --------------------------------------------------
+st.subheader("How Predictions Are Calculated")
+
+st.markdown("""
+The model predicts **log(sales)** using a regression structure:
+
+- Distribution contributes positively to base demand  
+- Price has a negative impact when above competition  
+- Advertising impact is modeled using a logarithmic (diminishing return) function  
+
+Predicted values are then converted back to actual monthly sales volume.
 """)
 
 st.divider()
 
 # --------------------------------------------------
-# Driver contribution (directional)
+# Driver contribution (horizontal & readable)
 # --------------------------------------------------
 st.subheader("Driver Contribution (Directional Impact)")
 
@@ -127,17 +176,30 @@ ad_effect = 0.012 * (np.log1p(adstock) - np.log1p(1000))
 
 contrib_df = pd.DataFrame({
     "Driver": ["Distribution", "Price", "Advertising"],
-    "Impact (log scale)": [dist_effect, price_effect, ad_effect]
+    "Impact": [dist_effect, price_effect, ad_effect]
 })
 
-st.bar_chart(contrib_df.set_index("Driver"))
+driver_chart = alt.Chart(contrib_df).mark_bar(size=28).encode(
+    y=alt.Y("Driver:N", sort="-x", title=None),
+    x=alt.X("Impact:Q", title="Directional Impact (log scale)"),
+    tooltip=["Driver", "Impact"]
+).properties(
+    height=250
+)
+
+st.altair_chart(driver_chart, use_container_width=True)
+
+st.caption("Note: Contribution values are directional indicators, not exact attribution.")
 
 st.divider()
 
 # --------------------------------------------------
-# Sensitivity analysis (Distribution curve)
+# Sensitivity analysis
 # --------------------------------------------------
 st.subheader("Sensitivity Analysis: Distribution vs Sales")
+st.caption(
+    "Shows how sales respond to changes in distribution while price and advertising are held constant."
+)
 
 dist_range = range(40, 61)
 sales_curve = [
