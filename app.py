@@ -18,60 +18,61 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Sidebar controls (with metadata)
+# SIDEBAR
 # --------------------------------------------------
 st.sidebar.title("Scenario Controls")
 
 distribution = st.sidebar.slider(
     "Weighted Distribution (%)",
     40, 60, 50,
-    help="Percentage of category sales coming from outlets where the brand is present"
+    help="Availability of the brand in high-value outlets"
 )
 
 price_ratio = st.sidebar.slider(
     "Price Ratio vs Competition",
     0.8, 1.2, 1.0, 0.01,
-    help="Brand price divided by competitor price (above 1 = premium pricing)"
+    help="Brand price divided by competitor price"
 )
 
 adstock = st.sidebar.slider(
     "Advertising Adstock",
     0, 4000, 1000,
-    help="Cumulative and lagged impact of advertising spend"
+    help="Lagged and cumulative impact of advertising"
 )
+
+st.sidebar.divider()
+
+# -------- Key Drivers in Sidebar (NEW)
+st.sidebar.subheader("Key Drivers")
+
+st.sidebar.markdown("""
+**1. Weighted Distribution (%)**  
+Presence in high-value outlets  
+
+**2. Price Ratio vs Competition**  
+Relative price positioning  
+
+**3. Advertising Adstock**  
+Lagged & cumulative media impact  
+""")
 
 # --------------------------------------------------
 # Prediction logic
 # --------------------------------------------------
 X_input = np.array([[distribution, price_ratio, np.log1p(adstock)]])
-log_sales_pred = model.predict(X_input)[0]
-sales_pred = np.expm1(log_sales_pred)
+sales_pred = np.expm1(model.predict(X_input)[0])
 
-# Base scenario
 X_base = np.array([[50, 1.0, np.log1p(1000)]])
 base_sales = np.expm1(model.predict(X_base)[0])
 
 # --------------------------------------------------
-# Title & overview
+# MAIN PAGE
 # --------------------------------------------------
 st.title("Marketing Mix Decision Simulator")
 st.caption("Interactive what-if analysis based on a trained regression model")
 
-st.subheader("Model Overview")
-st.markdown("""
-This simulator is based on a **log-linear Marketing Mix Model (MMX)** trained on
-historical monthly data.
-
-### Key Drivers
-- **Weighted Distribution (%)** – Availability in high-value outlets  
-- **Price Ratio vs Competition** – Relative price positioning  
-- **Advertising Adstock** – Lagged and cumulative media impact with diminishing returns
-""")
-
-st.divider()
-
 # --------------------------------------------------
-# KPI section
+# KPIs
 # --------------------------------------------------
 c1, c2, c3 = st.columns(3)
 
@@ -87,34 +88,11 @@ c3.metric("Sales Change vs Base", f"{int(sales_pred - base_sales):,}")
 st.divider()
 
 # --------------------------------------------------
-# Explainability & calculation logic
-# --------------------------------------------------
-st.subheader("Explainability (Elasticities)")
-st.markdown("""
-- **Distribution elasticity:** +2.1%  
-- **Price elasticity:** −0.57  
-- **Advertising elasticity:** +0.01 (diminishing)
-
-**Interpretation:**  
-Distribution is the strongest long-term growth lever.  
-Premium pricing reduces demand.  
-Advertising supports sales but with diminishing marginal returns.
-""")
-
-st.subheader("How Predictions Are Calculated")
-st.markdown("""
-The model predicts **log(sales)** using regression coefficients.
-The result is then converted back to actual monthly sales volume.
-""")
-
-st.divider()
-
-# --------------------------------------------------
-# Side-by-side charts (KEY CHANGE)
+# PARALLEL CHARTS (Scenario + Contribution)
 # --------------------------------------------------
 left_col, right_col = st.columns(2)
 
-# -------- Left: Scenario Comparison
+# ---- Scenario Comparison
 with left_col:
     st.subheader("Scenario Comparison")
 
@@ -123,19 +101,15 @@ with left_col:
         "Sales": [base_sales, sales_pred]
     })
 
-    scenario_chart = alt.Chart(compare_df).mark_bar(size=40).encode(
-        x=alt.X(
-            "Scenario:N",
-            title=None,
-            axis=alt.Axis(labelAngle=0)
-        ),
+    scenario_chart = alt.Chart(compare_df).mark_bar(size=45).encode(
+        x=alt.X("Scenario:N", title=None, axis=alt.Axis(labelAngle=0)),
         y=alt.Y("Sales:Q", title="Sales Volume"),
         tooltip=["Scenario", "Sales"]
-    ).properties(height=280)
+    ).properties(height=300)
 
     st.altair_chart(scenario_chart, use_container_width=True)
 
-# -------- Right: Driver Contribution
+# ---- Driver Contribution (SAME FORMAT)
 with right_col:
     st.subheader("Driver Contribution (Directional Impact)")
 
@@ -148,19 +122,20 @@ with right_col:
         ]
     })
 
-    driver_chart = alt.Chart(contrib_df).mark_bar(size=28).encode(
-        y=alt.Y("Driver:N", sort="-x", title=None),
-        x=alt.X("Impact:Q", title="Directional Impact (log scale)"),
+    contrib_chart = alt.Chart(contrib_df).mark_bar(size=45).encode(
+        x=alt.X("Driver:N", title=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("Impact:Q", title="Directional Impact (log scale)"),
         tooltip=["Driver", "Impact"]
-    ).properties(height=280)
+    ).properties(height=300)
 
-    st.altair_chart(driver_chart, use_container_width=True)
-    st.caption("Directional indicators only, not exact attribution.")
+    st.altair_chart(contrib_chart, use_container_width=True)
+
+st.caption("Driver contribution values are directional indicators, not exact attribution.")
 
 st.divider()
 
 # --------------------------------------------------
-# Sensitivity analysis
+# Sensitivity Analysis (below both charts)
 # --------------------------------------------------
 st.subheader("Sensitivity Analysis: Distribution vs Sales")
 st.caption("Price and advertising held constant.")
@@ -183,7 +158,35 @@ st.line_chart(curve_df.set_index("Distribution"))
 st.divider()
 
 # --------------------------------------------------
-# Save & compare scenarios
+# Explainability (placed BELOW charts)
+# --------------------------------------------------
+st.subheader("Explainability (Elasticities)")
+
+st.markdown("""
+- **Distribution elasticity:** +2.1%  
+- **Price elasticity:** −0.57  
+- **Advertising elasticity:** +0.01 (diminishing returns)
+
+**Interpretation**  
+Distribution is the strongest long-term growth lever.  
+Premium pricing reduces demand.  
+Advertising supports sales with diminishing returns.
+""")
+
+# --------------------------------------------------
+# Prediction Logic Explanation
+# --------------------------------------------------
+st.subheader("How Predictions Are Calculated")
+
+st.markdown("""
+The model predicts **log(sales)** using regression coefficients.
+Predicted values are then converted back to actual monthly sales volume.
+""")
+
+st.divider()
+
+# --------------------------------------------------
+# Save & Compare Scenarios
 # --------------------------------------------------
 st.subheader("Save & Compare Scenarios")
 
